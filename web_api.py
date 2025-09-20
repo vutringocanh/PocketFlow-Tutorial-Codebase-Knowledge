@@ -4,7 +4,7 @@ import subprocess
 import os
 import uuid
 import asyncio
-from typing import List
+from typing import List, Optional, Dict, Any
 
 app = FastAPI(
     title="My PocketFlow Tutorial Generator",
@@ -27,8 +27,8 @@ class TutorialResponse(BaseModel):
 class StatusResponse(BaseModel):
     task_id: str
     status: str
-    result: dict = None
-    error: str = None
+    result: Optional[Dict[str, Any]] = None  # FIX: Make result optional
+    error: Optional[str] = None
 
 # In-memory task storage (production should use Redis/Database)
 tasks = {}
@@ -51,7 +51,7 @@ async def health_check():
     return {
         "status": "healthy", 
         "service": "PocketFlow Tutorial Generator",
-        "active_tasks": len([t for t in tasks.values() if t["status"] == "processing"])
+        "active_tasks": len([t for t in tasks.values() if t.get("status") == "processing"])
     }
 
 @app.post("/generate-tutorial", response_model=TutorialResponse)
@@ -74,14 +74,15 @@ async def get_status(task_id: str):
         return StatusResponse(
             task_id=task_id,
             status="not_found",
+            result=None,  # Explicitly set to None
             error="Task not found"
         )
     
     task_data = tasks[task_id]
     return StatusResponse(
         task_id=task_id,
-        status=task_data["status"],
-        result=task_data.get("result"),
+        status=task_data.get("status", "unknown"),
+        result=task_data.get("result"),  # This can be None
         error=task_data.get("error")
     )
 
@@ -93,7 +94,7 @@ async def list_tasks():
         "tasks": [
             {
                 "task_id": task_id,
-                "status": task_data["status"],
+                "status": task_data.get("status", "unknown"),
                 "has_result": task_data.get("result") is not None
             }
             for task_id, task_data in tasks.items()
@@ -125,7 +126,8 @@ def run_pocketflow(task_id: str, request: RepositoryRequest):
             cmd.extend(["--exclude", pattern])
         
         # Update task status
-        tasks[task_id]["status"] = "running"
+        if task_id in tasks:
+            tasks[task_id]["status"] = "running"
         
         # Run the command
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 min timeout
@@ -150,17 +152,19 @@ def run_pocketflow(task_id: str, request: RepositoryRequest):
             }
             
     except subprocess.TimeoutExpired:
-        tasks[task_id] = {
-            "status": "failed",
-            "result": None,
-            "error": "Task timed out after 5 minutes"
-        }
+        if task_id in tasks:
+            tasks[task_id] = {
+                "status": "failed",
+                "result": None,
+                "error": "Task timed out after 5 minutes"
+            }
     except Exception as e:
-        tasks[task_id] = {
-            "status": "failed",
-            "result": None,
-            "error": f"Unexpected error: {str(e)}"
-        }
+        if task_id in tasks:
+            tasks[task_id] = {
+                "status": "failed",
+                "result": None,
+                "error": f"Unexpected error: {str(e)}"
+            }
 
 if __name__ == "__main__":
     import uvicorn
