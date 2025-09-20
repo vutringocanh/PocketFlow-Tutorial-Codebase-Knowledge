@@ -1,10 +1,6 @@
-# ============================================
-#     Updated Dockerfile - Web + CLI Support
-# ============================================
-
 FROM python:3.10-slim
 
-# Set environment variables for production
+# Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -28,18 +24,15 @@ COPY . .
 # Create directories for output and cache
 RUN mkdir -p /app/output /app/cache
 
-# Expose port for web server
+# Expose port
 EXPOSE 8000
 
-# Health check for deployment platforms
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Volume for output data
-VOLUME ["/app/output"]
+# XÓA DÒNG NÀY - Railway không cho phép:
+# VOLUME ["/app/output"]
 
-# Default command - Web API (can be overridden for CLI)
+# Default command - Web API
 CMD ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# To run CLI instead, override with:
-# docker run -it your-image python main.py --help
